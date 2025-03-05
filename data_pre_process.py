@@ -5,13 +5,12 @@ from tqdm import tqdm
 import pandas as pd
 
 np.random.seed(1234)
-current_dir = os.getcwd()
-SNRS = [0, 5, 15, 25]
+current_dir = os.getcwd() + "/"
+# -SNR mean that noise is x DB louder than the sentence audio
+SNRS = [-10, -5, 0, 5, 10]
 
 # Load the tsv from the dataset
-df = pd.read_csv(
-    "cv-corpus-20.0-delta-2024-12-06/en/validated_sentences.tsv", sep="\t"
-)
+df = pd.read_csv("cv-corpus-20.0-delta-2024-12-06/en/validated_sentences.tsv", sep="\t")
 ids = set(df["sentence_id"])
 
 df = pd.concat(
@@ -40,24 +39,41 @@ for i in range(n_chunks):
     df_chunk = df.iloc[chunk_indices].reset_index(drop=True)
     chunk_ids = df_chunk["sentence_id"].to_list()
     chunk_paths = df_chunk["path"].to_list()
-    chunks.append(list(zip(chunk_ids, chunk_paths)))
+    chunk_sentence = df_chunk["sentence"].to_list()
+    chunk_ages = df_chunk["age"].to_list()
+    chunk_accents = df_chunk["accents"].to_list()
+    chunk_gender = df_chunk["gender"].to_list()
+    chunks.append(
+        list(
+            zip(
+                chunk_ids,
+                chunk_paths,
+                chunk_sentence,
+                chunk_ages,
+                chunk_accents,
+                chunk_gender,
+            )
+        )
+    )
     start = end
 
+df = [None] * (len(chunks[0]) + sum([len(x) * len(SNRS) for x in chunks[1:]]))
+n = 0
 for noise_type in noise_cats:
     files = chunks[noise_cats.index(noise_type)]
 
     mkdir = True
     i = 0
-    for sentence_id, f_path in tqdm(files):
+    for sentence_id, f_path, true_sentence, age, accent, gender in tqdm(files):
         if sentence_id not in ids:  # We only want to use validated files
             continue
         i += 1
-        if i > 100:
+        if i > 10:
             break
 
-        # Need to check if everything is in mono or stereo!! if stereo collapse to mono
         sound_path = "cv-corpus-20.0-delta-2024-12-06/en/clips/" + f_path
-        sentence = AudioSegment.from_file(sound_path)
+        # Set the the number of channels to 1 in order to make sure we are working with mono audio
+        sentence = AudioSegment.from_file(sound_path).set_channels(1)
 
         if noise_type != "CLEAN":
             file_number = np.random.randint(low=1, high=17)
@@ -67,7 +83,7 @@ for noise_type in noise_cats:
                 "demand/SCAFE/ch"
                 + (str(file_number) if file_number >= 10 else "0" + str(file_number))
                 + ".wav"
-            )
+            ).set_channels(1)
 
             # Get a random start point for the noise
 
@@ -85,22 +101,60 @@ for noise_type in noise_cats:
                 # Overlay the noise. The file will be as long as the orginal recording as over doesnt change the length of the base object
                 overlay = sentence.overlay(noise_mod)
 
-                path = (
-                    "/testdata/" + noise_type + "/" + "SNR" + str(SNR) + "DB" + "/"
+                path = "testdata/"  # + noise_type + "/" + "SNR" + str(SNR) + "DB" + "/"
+
+                # if mkdir:
+                #    os.makedirs(current_dir + path, exist_ok=True)
+
+                relative_path = (
+                    path
+                    + noise_type
+                    + "_SNR_"
+                    + str(SNR)
+                    + "DB_"
+                    + f_path[:-4]
+                    + ".wav"
                 )
 
-                if mkdir:
-                    os.makedirs(current_dir + path, exist_ok=True)
+                overlay.export(
+                    current_dir + relative_path,
+                    format="wav",
+                )
 
-                overlay.export(current_dir + path + f_path[:-4] + ".wav", format="wav")
+                df[n] = (
+                    relative_path,
+                    noise_type,
+                    SNR,
+                    true_sentence,
+                    age,
+                    accent,
+                    gender,
+                )
+                n += 1
 
-            mkdir = False
+                # overlay.export(current_dir + path + f_path[:-4] + ".wav", format="wav")
+
+            # mkdir = False
 
         else:
-            path = "/testdata/" + noise_type + "/"
+            path = "testdata/"  # + noise_type + "/"
 
             if mkdir:
                 os.makedirs(current_dir + path, exist_ok=True)
                 mkdir = False
 
-            sentence.export(current_dir + path + f_path[:-4] + ".wav", format="wav")
+            relative_path = path + noise_type + "_" + f_path[:-4] + ".wav"
+
+            sentence.export(
+                current_dir + relative_path,
+                format="wav",
+            )
+            # sentence.export(current_dir + path + f_path[:-4] + ".wav", format="wav")
+
+            df[n] = (relative_path, "Clean", None, true_sentence, age, accent, gender)
+            n += 1
+
+df = pd.DataFrame(
+    df, columns=["path", "Noise type", "SNR", "sentence", "age", "accent", "gender"]
+)
+df.to_csv("processed_dataset.csv", index=False, sep=";")
