@@ -50,20 +50,30 @@ for noise_type in noise_cats:
     files = chunks[noise_cats.index(noise_type)]
 
     for f_path, true_sentence, age, accent, gender in tqdm(files):
-
         sound_path = "cv-corpus-10.0-delta-2022-07-04/en/clips/" + f_path
         # Set the the number of channels to 1 in order to make sure we are working with mono audio
-        sentence = AudioSegment.from_file(sound_path).set_channels(1)
+        # We also need to downsample the audio from 32 kHz to 16 kHz inorder for CMU to work properly
+        sentence = (
+            AudioSegment.from_file(sound_path).set_channels(1).set_frame_rate(16000)
+        )
 
         if noise_type != "CLEAN":
             file_number = np.random.randint(low=1, high=17)
 
             # Load the noise
-            noise = AudioSegment.from_file(
-                "demand/SCAFE/ch"
-                + (str(file_number) if file_number >= 10 else "0" + str(file_number))
-                + ".wav"
-            ).set_channels(1)
+            noise = (
+                AudioSegment.from_file(
+                    "demand/SCAFE/ch"
+                    + (
+                        str(file_number)
+                        if file_number >= 10
+                        else "0" + str(file_number)
+                    )
+                    + ".wav"
+                )
+                .set_channels(1)
+                .set_frame_rate(16000)
+            )
 
             # Get a random start point for the noise
 
