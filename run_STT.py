@@ -127,8 +127,6 @@ for model in models:
     transcripts = [None] * len(file_paths)
     latency = [None] * len(file_paths)
     for i, path in tqdm(enumerate(file_paths), total=len(file_paths)):
-        if i > 10:
-            break
         start_time = time.perf_counter()
 
         transcripts[i] = model.transcribe(path)
