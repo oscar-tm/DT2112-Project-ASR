@@ -1,20 +1,54 @@
 from tqdm import tqdm
 import pandas as pd
 import gc
-
-import logging
-from nemo.utils import logging as nemo_logging
-
-# Suppress warning message from nemo
-nemo_logging.setLevel(logging.CRITICAL)
+import time
 
 import torch
+import whisperx
 from faster_whisper import WhisperModel
 from nemo.collections.asr.models import EncDecMultiTaskModel
 from pocketsphinx import AudioFile
 
+import logging
+from nemo.utils import logging as nemo_logging
 
-class WhisperHelper:
+# Suppress a bunch of annoying warning/info messages
+nemo_logging.setLevel(logging.WARNING)
+logging.getLogger("whisperx").setLevel(logging.WARNING)
+logging.getLogger("faster_whisper").setLevel(logging.WARNING)
+logging.getLogger("nemo").setLevel(logging.WARNING)
+logging.basicConfig(level=logging.WARNING, force=True)
+
+
+class WhisperXHelper:
+    def __init__(self):
+        pass
+
+    def init_model(self, model_size="large-v3"):
+        # This will produce some warning but works
+        self.model = whisperx.load_model(
+            model_size,
+            device="cuda",
+            compute_type="float16",
+            language="en",
+        )
+
+    def transcribe(self, path, batch_size=16):
+        audio = whisperx.load_audio(path)
+        segments = self.model.transcribe(audio, batch_size=batch_size)
+        return "".join([segment["text"] for segment in segments["segments"]])
+
+    def __str__(self):
+        return "WisperX"
+
+    def del_model(self):
+        # Delete model in order to use next model on GPU
+        del self.model
+        gc.collect()
+        torch.cuda.empty_cache()
+
+
+class FWhisperHelper:
     def __init__(self):
         pass
 
@@ -26,7 +60,7 @@ class WhisperHelper:
         return "".join([segment.text for segment in segments])
 
     def __str__(self):
-        return "Wisper"
+        return "Faster Whisper"
 
     def del_model(self):
         # Delete model in order to use next model on GPU
@@ -71,11 +105,8 @@ class SphinxHelper:
         pass
 
     def transcribe(self, path):
-        try:
-            audio = AudioFile(audio_file=path)
-            return "".join([str(phrase) for phrase in audio])
-        except Exception as e:
-            return f"Error: {str(e)}"
+        audio = AudioFile(audio_file=path)
+        return "".join([str(phrase) for phrase in audio])
 
     def __str__(self):
         return "CMU Sphinx"
@@ -88,15 +119,25 @@ class SphinxHelper:
 df = pd.read_csv("processed_dataset.csv", sep=";")
 file_paths = df["path"].to_list()
 
-models = [WhisperHelper(), CanaryHelper(), SphinxHelper()]
+models = [WhisperXHelper(), FWhisperHelper(), CanaryHelper(), SphinxHelper()]
 
 for model in models:
     model.init_model()
 
     transcripts = [None] * len(file_paths)
+    latency = [None] * len(file_paths)
     for i, path in tqdm(enumerate(file_paths), total=len(file_paths)):
+        if i > 10:
+            break
+        start_time = time.perf_counter()
+
         transcripts[i] = model.transcribe(path)
+
+        t_total = time.perf_counter() - start_time
+        latency[i] = t_total
+
     df[str(model)] = transcripts
+    df[str(model) + " Latency"] = latency
 
     model.del_model()
 

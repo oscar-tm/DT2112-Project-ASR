@@ -46,9 +46,9 @@ for i in range(n_chunks):
 
 df = []
 mkdir = True
+
 for noise_type in noise_cats:
     files = chunks[noise_cats.index(noise_type)]
-
     for f_path, true_sentence, age, accent, gender in tqdm(files):
         sound_path = "cv-corpus-10.0-delta-2022-07-04/en/clips/" + f_path
         # Set the the number of channels to 1 in order to make sure we are working with mono audio
