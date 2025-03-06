@@ -5,11 +5,13 @@ import gc
 import logging
 from nemo.utils import logging as nemo_logging
 
+# Suppress warning message from nemo
 nemo_logging.setLevel(logging.CRITICAL)
 
 import torch
 from faster_whisper import WhisperModel
 from nemo.collections.asr.models import EncDecMultiTaskModel
+from pocketsphinx import AudioFile
 
 
 class WhisperHelper:
@@ -27,6 +29,7 @@ class WhisperHelper:
         return "Wisper"
 
     def del_model(self):
+        # Delete model in order to use next model on GPU
         del self.model
         gc.collect()
         torch.cuda.empty_cache()
@@ -53,15 +56,39 @@ class CanaryHelper:
         return "Canary"
 
     def del_model(self):
+        # Delete model in order to use next model on GPU
         del self.model
         gc.collect()
         torch.cuda.empty_cache()
 
 
+class SphinxHelper:
+    def __init__(self):
+        pass
+
+    def init_model(self):
+        # No explicit model initialization needed for CMU Sphinx
+        pass
+
+    def transcribe(self, path):
+        try:
+            audio = AudioFile(audio_file=path)
+            return "".join([str(phrase) for phrase in audio])
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def __str__(self):
+        return "CMU Sphinx"
+
+    def del_model(self):
+        # No need to delete anything as Sphinx doesn't use GPU memory
+        pass
+
+
 df = pd.read_csv("processed_dataset.csv", sep=";")
 file_paths = df["path"].to_list()
 
-models = [WhisperHelper(), CanaryHelper()]
+models = [WhisperHelper(), CanaryHelper(), SphinxHelper()]
 
 for model in models:
     model.init_model()
