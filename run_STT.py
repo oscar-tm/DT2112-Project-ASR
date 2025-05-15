@@ -1,3 +1,16 @@
+###
+#
+#   Written by:
+#   Oscar Tegnér Mohringe
+#
+#
+#   Loads the CSV from data_pre_process.py and loops through
+#   the provided data and performs ASR on the audio for the
+#   different models. Outputs all the transcription data to
+#   a STT_outputs.csv file.
+#
+###
+
 from tqdm import tqdm
 import pandas as pd
 import gc
@@ -13,6 +26,10 @@ import logging
 from nemo.utils import logging as nemo_logging
 
 # Suppress a bunch of annoying warning/info messages
+# Will still produces some annoying messages, in order
+# to stop these some lines of code in the source code
+# needs to commented out (Only lines with logging/print
+# statements, no code that affects the performance).
 nemo_logging.setLevel(logging.WARNING)
 logging.getLogger("whisperx").setLevel(logging.WARNING)
 logging.getLogger("faster_whisper").setLevel(logging.WARNING)
@@ -25,7 +42,8 @@ class WhisperXHelper:
         pass
 
     def init_model(self, model_size="large-v3"):
-        # This will produce some warning but works
+        # This will produce some warnings but works
+        # Loads the model to VRAM
         self.model = whisperx.load_model(
             model_size,
             device="cuda",
@@ -53,6 +71,7 @@ class FWhisperHelper:
         pass
 
     def init_model(self, model_size="large-v3"):
+        # Loads the model to VRAM
         self.model = WhisperModel(model_size, device="cuda", compute_type="float16")
 
     def transcribe(self, path):
@@ -74,6 +93,7 @@ class CanaryHelper:
         pass
 
     def init_model(self):
+        # Loads the model to VRAM
         self.model = EncDecMultiTaskModel.from_pretrained("nvidia/canary-1b")
         decode_cfg = self.model.cfg.decoding
         decode_cfg.beam.beam_size = 5
@@ -83,7 +103,7 @@ class CanaryHelper:
         return self.model.transcribe(
             audio=[path],
             verbose=False,
-            batch_size=16,  # batch size to run the inference with
+            batch_size=16,
         )[0]
 
     def __str__(self):
